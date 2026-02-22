@@ -2,5 +2,8 @@
   "buildCommand": "cd frontend && pnpm build",
   "outputDirectory": "frontend/.next",
   "installCommand": "cd frontend && pnpm install",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "env": {
+    "ENABLE_EXPERIMENTAL_COREPACK": "1"
+  }
 }
