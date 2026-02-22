@@ -2,92 +2,123 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Monorepo 구조
+
+```
+Your-Anime/
+├── frontend/     # Next.js 15 (App Router) — Vercel 배포
+├── backend/      # NestJS — Railway/Render 배포
+├── vercel.json   # Vercel 빌드 설정 (Root Directory = 프로젝트 루트)
+├── PRD.md        # 제품 요구사항 문서 (기능 구현 시 반드시 참조)
+└── .claude/      # Claude Code 에이전트/스킬 정의
+```
+
 ## Agents
 
 프로젝트에 특화된 서브에이전트가 `.claude/agents/`에 정의되어 있습니다. Task 도구로 호출하세요.
 
-| Agent | 파일 | 역할 |
-|---|---|---|
-| `requirement-planner` | `requirement-planner.md` | 모호한 요구사항을 구체화하고 단계별 실행 계획 수립 |
-| `senior-clean-architect` | `senior-clean-architect.md` | PRD 기반 프론트엔드 기능 구현 (컴포넌트, 상태관리, API 연동) |
-| `backend-developer` | `backend-developer.md` | API 설계, DB 스키마, 인증/인가, 서버 로직 구현 |
-| `framer-ui-designer` | `framer-ui-designer.md` | 반응형 UI 디자인, 애니메이션, Framer 기반 폴리싱 |
-
-**사용 순서 (PRD Section 2.2 기준)**: `requirement-planner` → `senior-clean-architect` / `backend-developer` → `framer-ui-designer`
+| Agent | 역할 |
+|---|---|
+| `requirement-planner` | 모호한 요구사항을 구체화하고 단계별 실행 계획 수립 |
+| `senior-clean-architect` | PRD 기반 프론트엔드 기능 구현 (컴포넌트, 상태관리, API 연동) |
+| `backend-developer` | NestJS API 설계, DB 스키마, 인증/인가, 서버 로직 구현 |
+| `framer-ui-designer` | 반응형 UI 디자인, 애니메이션, Framer 기반 폴리싱 |
 
 스킬(slash commands)은 `.claude/skills/`에 정의됩니다: `frontend-development`, `skill-creator`.
 
 ## Commands
 
+### Frontend (`frontend/`)
 ```bash
-pnpm dev          # Start development server
-pnpm build        # Production build
-pnpm start        # Start production server
-pnpm lint         # Run ESLint
+cd frontend
+pnpm dev          # 개발 서버 (localhost:3000)
+pnpm build        # 프로덕션 빌드
+pnpm start        # 프로덕션 서버
+pnpm lint         # ESLint
 ```
 
-No test suite is configured yet.
+### Backend (`backend/`)
+```bash
+cd backend
+pnpm start:dev    # 개발 서버 with watch (localhost:3001)
+pnpm build        # 프로덕션 빌드
+pnpm start:prod   # 프로덕션 서버
+pnpm test         # 단위 테스트
+pnpm test:e2e     # E2E 테스트
+pnpm lint         # ESLint
+```
 
-## Architecture Overview
+## Frontend 아키텍처
 
-**AnimeSommelier** is an AI-powered anime recommendation service. The current codebase is a **frontend-only MVP with mock data** — no real backend or external APIs are integrated yet. The PRD (`PRD.md`) describes the full target architecture with Supabase, Claude API, and Jikan API.
+**Tech Stack**: Next.js 15, React 19, TypeScript, Tailwind CSS, Framer Motion, Zustand, TanStack Query
 
-### Tech Stack
+**라우트 구조**
+- `(auth)` 그룹 — `/login`, `/signup` (공개)
+- `(app)` 그룹 — `/chat/select`, `/chat` (인증 필요, 미인증 시 `/login` 리다이렉트)
+- `/chat`은 `useConversationStore`의 `currentConversationId`가 없으면 `/chat/select`로 리다이렉트
 
-- **Framework**: Next.js 15 (App Router), React 19, TypeScript
-- **Styling**: Tailwind CSS v3, always-dark theme (`html` has `.dark` class applied globally in `globals.css`)
-- **Animation**: Framer Motion
-- **State**: Zustand (stores in `lib/stores/`)
-- **Package manager**: pnpm
+**상태관리 (Zustand)**
+- `useAuthStore` — 사용자 세션
+- `useConversationStore` — 대화 목록 및 메시지 (`persist` 미들웨어로 localStorage 영속화 — 백엔드 연동 시 제거 예정)
+- `useChatStore` — 독립 채팅 상태
 
-### Route Structure
+**Mock 레이어 (추후 교체 대상)**
 
-Two Next.js route groups:
-- `(auth)` — `/login`, `/signup` — public pages
-- `(app)` — `/chat/select`, `/chat` — requires authentication, redirects to `/login` if not authenticated
+| Mock 파일 | 교체 대상 |
+|---|---|
+| `lib/auth/mockAuth.ts` | Supabase Auth |
+| `lib/mock/aiResponses.ts` | Backend `/api/chat` 호출 |
+| `lib/mock/anime.ts` | Backend `/api/anime/*` 호출 |
 
-The flow for authenticated users: `/chat/select` → choose persona or resume conversation → `/chat`.
+**디자인 시스템**
+- 다크 테마 고정 (`html`에 `.dark` 클래스 전역 적용)
+- 주요 색상: 배경 `#04050e`, 액센트(민트) `#03f7b5`
+- CSS 유틸리티: `.card-dark`, `.gradient-text`, `.bg-orb` (`globals.css` 정의)
+- 애니메이션 래퍼: `components/ui/FadeIn.tsx`, `components/ui/StaggerChildren.tsx`
+- 클래스 병합: `lib/utils/cn.ts` (`clsx` + `tailwind-merge`)
 
-`/chat` requires `currentConversationId` to be set in `useConversationStore`; if missing, it redirects to `/chat/select`.
+**API 프록시**
+- 프론트에서 `/api/*` 호출 → `next.config.ts`의 rewrites가 백엔드(`NEXT_PUBLIC_BACKEND_URL`)로 전달
+- CORS 우회 및 백엔드 URL 은닉 목적
 
-### Mock Layer (Current State)
+## Backend 아키텍처
 
-All backend logic is mocked — replace these when integrating real services:
+**Tech Stack**: NestJS, TypeScript, Supabase (PostgreSQL + pgvector), Anthropic Claude API, OpenAI API (embeddings), Jikan API
 
-| Mock file | Purpose | Target replacement |
+**예정 모듈 구조**
+```
+backend/src/
+├── auth/           # Supabase Auth 연동, 미들웨어
+├── chat/           # POST /api/chat (Claude API 연동)
+├── conversations/  # 대화 CRUD
+├── anime/          # Jikan API + anime_cache
+├── user/           # 프로필, 선호도, 워치리스트
+└── common/         # Guards, Pipes, Interceptors
+```
+
+**핵심 DB 테이블** (Supabase PostgreSQL)
+- `user_profiles` — Supabase Auth 사용자 확장
+- `conversations` — 대화 세션
+- `messages` — 채팅 메시지 + vector(1536) embedding
+- `anime_cache` — Jikan API 응답 7일 캐시
+- `user_preferences` — 선호도 벡터 (Enhancement 단계)
+
+**환경변수**
+
+| 변수 | 위치 | 용도 |
 |---|---|---|
-| `lib/auth/mockAuth.ts` | Auth via `localStorage` | Supabase Auth |
-| `lib/mock/aiResponses.ts` | Keyword-matched fake AI replies | Claude API (`@anthropic-ai/sdk`) |
-| `lib/mock/anime.ts` | Hardcoded anime data | Jikan API v4 |
-| `lib/mock/personas.ts` | Persona definitions | `lib/ai/prompts.ts` (planned) |
-| `lib/mock/conversations.ts` | Seed conversation data | Supabase DB |
+| `NEXT_PUBLIC_SUPABASE_URL` | frontend | Supabase 클라이언트 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | frontend | Supabase 클라이언트 (RLS 적용) |
+| `NEXT_PUBLIC_BACKEND_URL` | frontend | 백엔드 서버 URL |
+| `SUPABASE_URL` | backend | Supabase 서버 클라이언트 |
+| `SUPABASE_SERVICE_ROLE_KEY` | backend | Supabase 서버 클라이언트 (RLS 우회) |
+| `ANTHROPIC_API_KEY` | backend | Claude API |
+| `OPENAI_API_KEY` | backend | Embedding 생성 |
+| `UPSTASH_REDIS_REST_URL` | backend | Rate Limiting |
+| `UPSTASH_REDIS_REST_TOKEN` | backend | Rate Limiting |
 
-### State Management
+## 배포
 
-Three Zustand stores:
-
-- `useAuthStore` — user session; calls `mockAuth`, initializes from `localStorage` on mount via `initialize()`
-- `useConversationStore` — conversation list and per-conversation messages; **persisted** to `localStorage` via `zustand/middleware persist` (key: `conversation-storage`)
-- `useChatStore` — lightweight store for standalone chat state; less used than `useConversationStore` in the current app pages
-
-`AuthProvider` (`components/providers/AuthProvider.tsx`) calls `useAuthStore.initialize()` on mount to restore session. `Providers` wraps the app with `AuthProvider` and `QueryClientProvider`.
-
-### Design System
-
-- Background: `#04050e`, primary accent: `#03f7b5` (mint/cyan)
-- CSS utility classes defined in `globals.css`: `.card-dark`, `.card-flat`, `.gradient-text`, `.bg-orb`, `.glow-primary`
-- Reusable animation wrappers: `components/ui/FadeIn.tsx`, `components/ui/StaggerChildren.tsx`
-- `lib/utils/cn.ts` — combines `clsx` + `tailwind-merge` for conditional class merging
-
-### External API Plans (from PRD)
-
-When integrating real services, the required environment variables are:
-```
-NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
-ANTHROPIC_API_KEY
-OPENAI_API_KEY          # for text-embedding-3-small
-UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
-NEXT_PUBLIC_APP_URL
-```
-
-`next.config.ts` already allows images from `cdn.myanimelist.net` for anime poster images.
+- **Frontend**: Vercel — 루트의 `vercel.json`으로 `frontend/` 빌드
+  - Vercel 대시보드에서 Root Directory를 별도 설정할 필요 없음
+- **Backend**: Railway or Render — `backend/` 디렉터리를 Root Directory로 지정
