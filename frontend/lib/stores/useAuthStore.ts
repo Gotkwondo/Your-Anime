@@ -10,7 +10,8 @@ interface AuthStore {
 
   initialize: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<{ needsEmailConfirmation: boolean }>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -58,12 +59,25 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ isLoading: true });
     const supabase = getSupabaseClient();
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) {
       set({ isLoading: false });
       throw new Error(error.message);
     }
     set({ isLoading: false });
+    // session이 null이면 이메일 인증 대기 상태
+    return { needsEmailConfirmation: !data.session };
+  },
+
+  signInWithGoogle: async () => {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (error) throw new Error(error.message);
   },
 
   signOut: async () => {
