@@ -59,7 +59,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ isLoading: true });
     const supabase = getSupabaseClient();
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        // 인증 코드를 /auth/callback으로 보내야 exchangeCodeForSession이 호출됨 (PKCE 플로우)
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
     if (error) {
       set({ isLoading: false });
       throw new Error(error.message);
