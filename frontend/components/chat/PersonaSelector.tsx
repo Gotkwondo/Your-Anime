@@ -1,7 +1,7 @@
 'use client';
 
 import { PersonaType } from '@/types/conversation';
-import { PERSONAS } from '@/lib/mock/personas';
+import { PERSONAS } from '@/constants/personas';
 import { cn } from '@/lib/utils/cn';
 
 interface PersonaSelectorProps {

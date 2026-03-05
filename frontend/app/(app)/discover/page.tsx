@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import { AnimeGrid } from '@/components/anime/AnimeGrid';
-import { MOCK_ANIME } from '@/lib/mock/anime';
+import { FEATURED_ANIME } from '@/constants/featuredAnime';
 import { AppHeader, HeaderButton } from '@/components/layout/AppHeader';
 
 export default function DiscoverPage() {
@@ -56,7 +56,7 @@ export default function DiscoverPage() {
         </div>
 
         <div className="animate-fade-in">
-          <AnimeGrid animes={MOCK_ANIME} />
+          <AnimeGrid animes={FEATURED_ANIME} />
         </div>
       </main>
     </div>

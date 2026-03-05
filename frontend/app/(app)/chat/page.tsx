@@ -1,26 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import { useConversationStore } from '@/lib/stores/useConversationStore';
+import { useChatStore } from '@/lib/stores/useChatStore';
 import { ChatInterface } from '@/components/chat/ChatInterface';
-import { Message } from '@/types/conversation';
 import { AppHeader, HeaderButton } from '@/components/layout/AppHeader';
-import { generateMockAIResponse } from '@/lib/mock/aiResponses';
 
 export default function ChatPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, signOut } = useAuthStore();
   const {
     currentConversationId,
-    getCurrentMessages,
     getCurrentConversation,
-    saveMessage,
+    loadConversation,
   } = useConversationStore();
-
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const { messages, isLoading, error, setConversation, sendMessage } = useChatStore();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -28,64 +24,25 @@ export default function ChatPage() {
       return;
     }
 
-    // If no conversation is selected, redirect to select page
     if (!authLoading && isAuthenticated && !currentConversationId) {
       router.push('/chat/select');
       return;
     }
 
-    // Load current conversation messages
     if (currentConversationId) {
-      setMessages(getCurrentMessages());
+      const conversation = getCurrentConversation();
+      if (conversation) {
+        setConversation(currentConversationId, conversation.personaType);
+      }
+      // 메시지 목록 로드
+      void loadConversation(currentConversationId);
     }
-  }, [isAuthenticated, authLoading, currentConversationId, router, getCurrentMessages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, authLoading, currentConversationId]);
 
   const handleSignOut = async () => {
     await signOut();
     router.push('/');
-  };
-
-  const handleSendMessage = async (content: string) => {
-    if (!currentConversationId) return;
-
-    const conversation = getCurrentConversation();
-    if (!conversation) return;
-
-    // Add user message
-    const userMessage: Message = {
-      id: `msg-${Date.now()}`,
-      conversationId: currentConversationId,
-      role: 'user',
-      content,
-      timestamp: new Date(),
-    };
-
-    saveMessage(currentConversationId, userMessage);
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      // Generate AI response
-      const aiContent = await generateMockAIResponse(
-        content,
-        conversation.personaType
-      );
-
-      const aiMessage: Message = {
-        id: `msg-${Date.now() + 1}`,
-        conversationId: currentConversationId,
-        role: 'assistant',
-        content: aiContent,
-        timestamp: new Date(),
-      };
-
-      saveMessage(currentConversationId, aiMessage);
-      setMessages((prev) => [...prev, aiMessage]);
-    } catch (error) {
-      console.error('Failed to get AI response:', error);
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const handleNewChat = () => {
@@ -118,10 +75,16 @@ export default function ChatPage() {
         }
       />
 
+      {error && (
+        <div className="px-4 py-2 text-sm text-red-400 bg-red-900/20 border-b border-red-900/30">
+          {error}
+        </div>
+      )}
+
       <div className="flex-1 overflow-hidden">
         <ChatInterface
           messages={messages}
-          onSendMessage={handleSendMessage}
+          onSendMessage={sendMessage}
           isLoading={isLoading}
         />
       </div>
