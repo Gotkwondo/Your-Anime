@@ -1,72 +1,87 @@
 import { create } from 'zustand';
 import { Message, PersonaType } from '@/types/conversation';
-import { generateMockAIResponse } from '@/lib/mock/aiResponses';
+import { apiRequest } from '@/lib/api/client';
+import { useConversationStore } from './useConversationStore';
 
 interface ChatStore {
   messages: Message[];
-  conversationId: string;
+  conversationId: string | null;
   personaType: PersonaType;
   isLoading: boolean;
+  error: string | null;
 
-  setPersona: (persona: PersonaType) => void;
+  setConversation: (conversationId: string, personaType: PersonaType) => void;
   sendMessage: (content: string) => Promise<void>;
   clearMessages: () => void;
 }
 
+interface ChatApiResponse {
+  success: true;
+  data: {
+    message: string;
+    conversationId: string;
+    recommendations?: Array<{
+      mal_id: number;
+      title: string;
+      reasoning: string;
+    }>;
+  };
+}
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   messages: [],
-  conversationId: `conv-${Date.now()}`,
+  conversationId: null,
   personaType: 'sommelier',
   isLoading: false,
+  error: null,
 
-  setPersona: (persona) => {
-    set({
-      personaType: persona,
-      messages: [],
-      conversationId: `conv-${Date.now()}`,
-    });
+  setConversation: (conversationId: string, personaType: PersonaType) => {
+    set({ conversationId, personaType, messages: [], error: null });
   },
 
   sendMessage: async (content: string) => {
-    const { messages, conversationId, personaType } = get();
+    const { conversationId, messages } = get();
+    if (!conversationId) return;
 
-    // Add user message
     const userMessage: Message = {
-      id: `msg-${Date.now()}`,
+      id: `temp-user-${Date.now()}`,
       conversationId,
       role: 'user',
       content,
       timestamp: new Date(),
     };
 
-    set({ messages: [...messages, userMessage], isLoading: true });
+    set({ messages: [...messages, userMessage], isLoading: true, error: null });
 
     try {
-      // Generate AI response
-      const aiContent = await generateMockAIResponse(content, personaType);
+      const res = await apiRequest<ChatApiResponse>('/api/chat', {
+        method: 'POST',
+        body: { message: content, conversationId },
+      });
 
       const aiMessage: Message = {
-        id: `msg-${Date.now() + 1}`,
+        id: `temp-ai-${Date.now()}`,
         conversationId,
         role: 'assistant',
-        content: aiContent,
+        content: res.data.message,
         timestamp: new Date(),
+        animeReferences: res.data.recommendations,
       };
 
       set((state) => ({
         messages: [...state.messages, aiMessage],
         isLoading: false,
       }));
-    } catch (error) {
-      console.error('Failed to get AI response:', error);
-      set({ isLoading: false });
+
+      // useConversationStore에도 메시지 반영
+      useConversationStore.getState().appendMessage(conversationId, userMessage);
+      useConversationStore.getState().appendMessage(conversationId, aiMessage);
+    } catch (err) {
+      set({ error: (err as Error).message, isLoading: false });
     }
   },
 
   clearMessages: () => {
-    set({
-      messages: [],
-      conversationId: `conv-${Date.now()}`,
-    });
+    set({ messages: [], conversationId: null, error: null });
   },
 }));

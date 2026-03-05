@@ -1,70 +1,85 @@
 import { create } from 'zustand';
-import { User, AuthState } from '@/types/user';
-import { mockAuth } from '@/lib/auth/mockAuth';
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
-interface AuthStore extends AuthState {
+interface AuthStore {
+  user: User | null;
+  accessToken: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+
+  initialize: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  initialize: () => void;
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
+  accessToken: null,
   isAuthenticated: false,
   isLoading: true,
 
-  initialize: () => {
-    const user = mockAuth.getCurrentUser();
+  initialize: async () => {
+    const supabase = getSupabaseClient();
+
+    const { data: { session } } = await supabase.auth.getSession();
     set({
-      user,
-      isAuthenticated: !!user,
+      user: session?.user ?? null,
+      accessToken: session?.access_token ?? null,
+      isAuthenticated: !!session?.user,
       isLoading: false,
+    });
+
+    // 세션 상태 변경 리스너 (토큰 갱신 포함)
+    supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+      set({
+        user: session?.user ?? null,
+        accessToken: session?.access_token ?? null,
+        isAuthenticated: !!session?.user,
+        isLoading: false,
+      });
     });
   },
 
   signIn: async (email: string, password: string) => {
     set({ isLoading: true });
-    try {
-      const user = await mockAuth.signIn(email, password);
-      set({
-        user,
-        isAuthenticated: true,
-        isLoading: false,
-      });
-    } catch (error) {
+    const supabase = getSupabaseClient();
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
       set({ isLoading: false });
-      throw error;
+      throw new Error(error.message);
     }
+    set({ isLoading: false });
   },
 
   signUp: async (email: string, password: string) => {
     set({ isLoading: true });
-    try {
-      const user = await mockAuth.signUp(email, password);
-      set({
-        user,
-        isAuthenticated: true,
-        isLoading: false,
-      });
-    } catch (error) {
+    const supabase = getSupabaseClient();
+
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) {
       set({ isLoading: false });
-      throw error;
+      throw new Error(error.message);
     }
+    set({ isLoading: false });
   },
 
   signOut: async () => {
     set({ isLoading: true });
-    try {
-      await mockAuth.signOut();
-      set({
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-      });
-    } catch (error) {
+    const supabase = getSupabaseClient();
+
+    const { error } = await supabase.auth.signOut();
+    if (error) {
       set({ isLoading: false });
-      throw error;
+      throw new Error(error.message);
     }
+    set({
+      user: null,
+      accessToken: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
   },
 }));

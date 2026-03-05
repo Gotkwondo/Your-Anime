@@ -1,13 +1,19 @@
 // Conversation types based on PRD Section 2.3 - F1, F3, F4
 export type PersonaType = 'sommelier' | 'cafe_owner' | 'otaku_friend';
 
+export interface AnimeReference {
+  mal_id: number;
+  title: string;
+  reasoning: string;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  embedding?: number[]; // 1536-dim vector (future)
+  animeReferences?: AnimeReference[];
 }
 
 export interface Conversation {

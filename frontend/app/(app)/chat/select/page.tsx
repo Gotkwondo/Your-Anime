@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import { useConversationStore } from '@/lib/stores/useConversationStore';
+import { useChatStore } from '@/lib/stores/useChatStore';
 import { ConversationList } from '@/components/sidebar/ConversationList';
 import { PersonaSelector } from '@/components/chat/PersonaSelector';
 import { PersonaType } from '@/types/conversation';
@@ -15,34 +16,48 @@ export default function ChatSelectPage() {
   const {
     conversations,
     currentConversationId,
+    fetchConversations,
     createConversation,
     loadConversation,
     deleteConversation,
   } = useConversationStore();
+  const { setConversation } = useChatStore();
 
   const [view, setView] = useState<'choice' | 'history' | 'new'>('choice');
   const [selectedPersona, setSelectedPersona] = useState<PersonaType>('sommelier');
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push('/login');
+      return;
     }
-  }, [isAuthenticated, authLoading, router]);
+    if (isAuthenticated) {
+      void fetchConversations();
+    }
+  }, [isAuthenticated, authLoading, router, fetchConversations]);
 
   const handleSignOut = async () => {
     await signOut();
     router.push('/');
   };
 
-  const handleSelectConversation = (conversationId: string) => {
-    loadConversation(conversationId);
+  const handleSelectConversation = async (conversationId: string) => {
+    await loadConversation(conversationId);
+    const conv = useConversationStore.getState().conversations.find((c) => c.id === conversationId);
+    if (conv) setConversation(conversationId, conv.personaType);
     router.push('/chat');
   };
 
-  const handleCreateNewConversation = () => {
-    const conversationId = createConversation(selectedPersona);
-    loadConversation(conversationId);
-    router.push('/chat');
+  const handleCreateNewConversation = async () => {
+    setIsCreating(true);
+    try {
+      const conversationId = await createConversation(selectedPersona);
+      setConversation(conversationId, selectedPersona);
+      router.push('/chat');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   if (authLoading || !isAuthenticated) {
@@ -147,8 +162,8 @@ export default function ChatSelectPage() {
               <ConversationList
                 conversations={conversations}
                 currentConversationId={currentConversationId}
-                onSelectConversation={handleSelectConversation}
-                onDeleteConversation={deleteConversation}
+                onSelectConversation={(id) => void handleSelectConversation(id)}
+                onDeleteConversation={(id) => void deleteConversation(id)}
               />
             </div>
           </div>
@@ -167,11 +182,12 @@ export default function ChatSelectPage() {
             />
             <div className="mt-8 flex justify-end">
               <button
-                onClick={handleCreateNewConversation}
-                className="px-7 py-3 rounded-[5px] text-sm font-semibold transition-all hover:opacity-90 active:scale-95"
+                onClick={() => void handleCreateNewConversation()}
+                disabled={isCreating}
+                className="px-7 py-3 rounded-[5px] text-sm font-semibold transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
                 style={{ background: '#03f7b5', color: '#04050e', boxShadow: '0 10px 20px rgba(3,247,181,0.2)' }}
               >
-                Start Conversation →
+                {isCreating ? 'Creating...' : 'Start Conversation →'}
               </button>
             </div>
           </div>
