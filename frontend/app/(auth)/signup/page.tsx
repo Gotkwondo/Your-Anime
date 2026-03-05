@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
@@ -16,6 +16,7 @@ export default function SignupPage() {
   const router = useRouter();
   const signUp = useAuthStore((state) => state.signUp);
   const signInWithGoogle = useAuthStore((state) => state.signInWithGoogle);
+  const resendConfirmation = useAuthStore((state) => state.resendConfirmation);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,6 +25,30 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendSuccess, setResendSuccess] = useState(false);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
+  }, []);
+
+  const handleResend = async () => {
+    setResendSuccess(false);
+    try {
+      await resendConfirmation(email);
+      setResendSuccess(true);
+      setResendCooldown(60);
+      cooldownRef.current = setInterval(() => {
+        setResendCooldown((prev) => {
+          if (prev <= 1) { clearInterval(cooldownRef.current!); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resend email');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,8 +102,25 @@ export default function SignupPage() {
             >
               Go to login
             </Link>
+            {error && (
+              <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20">
+                {error}
+              </div>
+            )}
+            {resendSuccess && (
+              <p className="text-sm text-primary">Email resent successfully!</p>
+            )}
             <p className="text-xs text-muted-foreground">
-              Didn&apos;t receive an email? Check your spam folder.
+              Didn&apos;t receive an email? Check your spam folder or{' '}
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendCooldown > 0}
+                className="text-primary hover:text-primary/80 disabled:text-muted-foreground disabled:cursor-not-allowed transition-colors"
+              >
+                {resendCooldown > 0 ? `resend in ${resendCooldown}s` : 'resend email'}
+              </button>
+              .
             </p>
           </div>
         </div>

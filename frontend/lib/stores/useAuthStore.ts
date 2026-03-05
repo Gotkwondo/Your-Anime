@@ -11,6 +11,7 @@ interface AuthStore {
   initialize: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<{ needsEmailConfirmation: boolean }>;
+  resendConfirmation: (email: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -74,6 +75,18 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ isLoading: false });
     // session이 null이면 이메일 인증 대기 상태
     return { needsEmailConfirmation: !data.session };
+  },
+
+  resendConfirmation: async (email: string) => {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (error) throw new Error(error.message);
   },
 
   signInWithGoogle: async () => {
