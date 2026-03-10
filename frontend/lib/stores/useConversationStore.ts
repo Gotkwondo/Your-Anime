@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Conversation, Message, PersonaType } from '@/types/conversation';
+import { AnimeReference, Conversation, Message, PersonaType } from '@/types/conversation';
 import { apiRequest } from '@/lib/api/client';
 
 interface ConversationStore {
@@ -48,7 +48,7 @@ interface ApiConversationDetail {
     id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
-    animeReferences: Array<{ mal_id: number; title: string }>;
+    animeReferences: AnimeReference[];
     createdAt: string;
   }>;
 }

@@ -2,9 +2,17 @@
 export type PersonaType = 'sommelier' | 'cafe_owner' | 'otaku_friend';
 
 export interface AnimeReference {
-  mal_id: number;
+  malId: number;
   title: string;
-  reasoning: string;
+  titleJapanese?: string | null;
+  imageUrl?: string | null;
+  score?: number | null;
+  genres?: string[];
+  episodes?: number | null;
+  status?: string | null;
+  synopsis?: string | null;
+  url?: string;
+  aiReasoning?: string;
 }
 
 export interface Message {
