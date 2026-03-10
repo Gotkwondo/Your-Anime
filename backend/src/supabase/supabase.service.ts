@@ -13,8 +13,15 @@ export class SupabaseService {
     );
 
     // 서비스 롤 클라이언트: RLS 우회, 서버 전용
+    // Authorization 헤더를 명시적으로 설정해야 PostgREST가 service_role로 처리함
+    // (supabase-js v2에서 apikey만으로는 Authorization 헤더가 자동 설정되지 않음)
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     this.serviceRoleClient = createClient(supabaseUrl, serviceRoleKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+      },
       auth: {
         autoRefreshToken: false,
         persistSession: false,

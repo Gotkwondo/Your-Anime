@@ -201,10 +201,10 @@ export class ConversationsService {
     const data = rawData as unknown as NewConversationRow | null;
 
     if (error || !data) {
-      this.logger.error('대화 생성 실패', error);
+      this.logger.error('대화 생성 실패', JSON.stringify(error));
       throw new BadRequestException({
         success: false,
-        error: '대화를 생성하는 중 오류가 발생했습니다.',
+        error: `대화를 생성하는 중 오류가 발생했습니다. [${error?.code ?? 'UNKNOWN'}] ${error?.message ?? ''}`,
         statusCode: 400,
       });
     }

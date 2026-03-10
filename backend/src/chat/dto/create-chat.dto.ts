@@ -6,7 +6,8 @@ export const CreateChatSchema = z.object({
   message: z
     .string()
     .min(1, '메시지를 입력해주세요.')
-    .max(5000, '메시지는 5000자를 초과할 수 없습니다.'),
+    .max(5000, '메시지는 5000자를 초과할 수 없습니다.')
+    .refine((val) => val.trim().length > 0, '공백만으로 이루어진 메시지는 전송할 수 없습니다.'),
   conversationId: z
     .string()
     .uuid('conversationId는 유효한 UUID 형식이어야 합니다.'),

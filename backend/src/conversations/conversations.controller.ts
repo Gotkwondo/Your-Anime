@@ -26,15 +26,9 @@ import { AuthGuard } from '../auth/auth.guard.js';
 import { ConversationsService, PersonaType } from './conversations.service.js';
 
 const CreateConversationSchema = z.object({
-  personaType: z
-    .enum(['sommelier', 'cafe_owner', 'otaku_friend'])
-    .refine(
-      (val) => ['sommelier', 'cafe_owner', 'otaku_friend'].includes(val),
-      {
-        message:
-          'personaType은 sommelier, cafe_owner, otaku_friend 중 하나여야 합니다.',
-      },
-    ),
+  personaType: z.enum(['sommelier', 'cafe_owner', 'otaku_friend'] as const, {
+    message: `personaType은 sommelier, cafe_owner, otaku_friend 중 하나여야 합니다.`,
+  }),
   title: z.string().max(200).optional(),
 });
 

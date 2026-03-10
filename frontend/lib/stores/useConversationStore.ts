@@ -19,43 +19,59 @@ interface ConversationStore {
   setCurrentConversationId: (id: string | null) => void;
 }
 
-interface ApiConversation {
+// GET /api/conversations 응답 (camelCase)
+interface ApiConversationListItem {
   id: string;
-  user_id: string;
-  persona_type: PersonaType;
   title: string | null;
-  created_at: string;
-  updated_at: string;
+  personaType: PersonaType;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
 }
 
-interface ApiMessage {
+// POST /api/conversations 응답 (camelCase, user_id/updatedAt 없음)
+interface ApiConversationCreate {
   id: string;
-  conversation_id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  created_at: string;
-  anime_references: Array<{ mal_id: number; title: string; reasoning: string }>;
+  personaType: PersonaType;
+  title: string | null;
+  createdAt: string;
 }
 
-function mapApiConversation(c: ApiConversation): Conversation {
+// GET /api/conversations/:id 응답 (camelCase)
+interface ApiConversationDetail {
+  id: string;
+  title: string | null;
+  personaType: PersonaType;
+  createdAt: string;
+  updatedAt: string;
+  messages: Array<{
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    animeReferences: Array<{ mal_id: number; title: string }>;
+    createdAt: string;
+  }>;
+}
+
+function mapListItem(c: ApiConversationListItem): Conversation {
   return {
     id: c.id,
-    userId: c.user_id,
-    personaType: c.persona_type,
+    userId: '',
+    personaType: c.personaType,
     title: c.title ?? 'New Conversation',
-    createdAt: new Date(c.created_at),
-    updatedAt: new Date(c.updated_at),
+    createdAt: new Date(c.createdAt),
+    updatedAt: new Date(c.updatedAt),
   };
 }
 
-function mapApiMessage(m: ApiMessage): Message {
+function mapCreateResponse(c: ApiConversationCreate): Conversation {
   return {
-    id: m.id,
-    conversationId: m.conversation_id,
-    role: m.role === 'system' ? 'assistant' : m.role,
-    content: m.content,
-    timestamp: new Date(m.created_at),
-    animeReferences: m.anime_references,
+    id: c.id,
+    userId: '',
+    personaType: c.personaType,
+    title: c.title ?? 'New Conversation',
+    createdAt: new Date(c.createdAt),
+    updatedAt: new Date(c.createdAt),
   };
 }
 
@@ -71,10 +87,10 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     try {
       const res = await apiRequest<{
         success: true;
-        data: { conversations: ApiConversation[] };
+        data: { conversations: ApiConversationListItem[]; total: number; hasMore: boolean };
       }>('/api/conversations');
       set({
-        conversations: res.data.conversations.map(mapApiConversation),
+        conversations: res.data.conversations.map(mapListItem),
         isLoading: false,
       });
     } catch (err) {
@@ -84,11 +100,11 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
   createConversation: async (personaType: PersonaType) => {
     set({ isLoading: true, error: null });
-    const res = await apiRequest<{ success: true; data: ApiConversation }>(
+    const res = await apiRequest<{ success: true; data: ApiConversationCreate }>(
       '/api/conversations',
       { method: 'POST', body: { personaType } },
     );
-    const conversation = mapApiConversation(res.data);
+    const conversation = mapCreateResponse(res.data);
 
     set((state) => ({
       conversations: [conversation, ...state.conversations],
@@ -105,10 +121,18 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     try {
       const res = await apiRequest<{
         success: true;
-        data: { conversation: ApiConversation; messages: ApiMessage[] };
+        data: ApiConversationDetail;
       }>(`/api/conversations/${conversationId}`);
 
-      const messages = res.data.messages.map(mapApiMessage);
+      const messages: Message[] = res.data.messages.map((m) => ({
+        id: m.id,
+        conversationId,
+        role: m.role === 'system' ? 'assistant' : m.role,
+        content: m.content,
+        timestamp: new Date(m.createdAt),
+        animeReferences: m.animeReferences,
+      }));
+
       set((state) => ({
         conversationMessages: { ...state.conversationMessages, [conversationId]: messages },
         isLoading: false,

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude_ai_supabase__list_tables",
+      "mcp__claude_ai_supabase__list_extensions",
+      "mcp__claude_ai_supabase__list_migrations",
+      "mcp__claude_ai_supabase__apply_migration",
+      "mcp__claude_ai_supabase__get_advisors",
+      "mcp__claude_ai_supabase__execute_sql",
+      "mcp__claude_ai_supabase__get_logs",
+      "Bash(node:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls not:*)"
+    ]
+  }
+}

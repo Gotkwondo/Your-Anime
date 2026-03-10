@@ -75,11 +75,17 @@ export class AnimeService {
 
     const supabase = this.supabaseService.getServiceRoleClient();
 
+    // ilike 패턴 특수문자 이스케이프 (%, _, \)
+    const escapedQuery = query
+      .replace(/\\/g, '\\\\')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+
     // 1. 캐시에서 제목 검색 (ilike로 부분 일치)
     const { data: rawCachedResults } = await supabase
       .from('anime_cache')
       .select('mal_id, title, title_japanese, data, cached_at')
-      .or(`title.ilike.%${query}%,title_japanese.ilike.%${query}%`)
+      .or(`title.ilike.%${escapedQuery}%,title_japanese.ilike.%${escapedQuery}%`)
       .gt('expires_at', new Date().toISOString())
       .limit(limit);
 
