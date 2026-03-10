@@ -21,7 +21,7 @@ backend/coverage/
 backend/*.tsbuildinfo
 
 # ─── Claude Code ───────────────────────────────────────────────
-.claude/
+# .claude/
 
 # ─── OS ────────────────────────────────────────────────────────
 .DS_Store
