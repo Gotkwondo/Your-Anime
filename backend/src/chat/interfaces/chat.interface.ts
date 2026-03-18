@@ -8,14 +8,21 @@ export interface AnimeRecommendation {
   episodes: number | null;
   status: string | null;
   synopsis: string | null;
+  synopsisKo: string | null;
   url: string;
   aiReasoning: string;
 }
 
-export interface ChatResponse {
-  message: string;
+export interface ChatData {
   conversationId: string;
-  recommendations?: AnimeRecommendation[];
+  message: string;
+  messageType: 'chat' | 'recommendation';
+}
+
+export interface ChatResponse {
+  data: ChatData;
+  isOrganized: boolean;
+  organizedData?: AnimeRecommendation[];
 }
 
 export interface JikanAnimeData {

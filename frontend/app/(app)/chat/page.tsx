@@ -14,9 +14,8 @@ export default function ChatPage() {
   const {
     currentConversationId,
     getCurrentConversation,
-    loadConversation,
   } = useConversationStore();
-  const { messages, isLoading, error, setConversation, sendMessage } = useChatStore();
+  const { messages, isLoading, error, setConversation, loadHistory, sendMessage } = useChatStore();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -34,8 +33,7 @@ export default function ChatPage() {
       if (conversation) {
         setConversation(currentConversationId, conversation.personaType);
       }
-      // 메시지 목록 로드
-      void loadConversation(currentConversationId);
+      void loadHistory(currentConversationId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, authLoading, currentConversationId]);

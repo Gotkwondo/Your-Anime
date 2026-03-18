@@ -31,6 +31,45 @@ Supabase 관련 작업은 **반드시 MCP 도구(`mcp__supabase__*`)를 우선 �
 3. 타입 변경 후에는 `generate_typescript_types`로 최신 타입을 재생성
 4. 작업 전후로 `get_advisors`를 호출해 RLS 정책 누락이나 보안 이슈를 점검
 
+## 프로젝트 특화 컨텍스트 (Your-Anime)
+
+**기술 스택**: NestJS + Supabase (PostgreSQL + pgvector) + Claude Haiku 4.5 + 자체 임베딩 파이프라인 + Jikan API
+
+**AI 모델 사용 원칙**:
+- 기본 대화: `claude-haiku-4-5-20251001`
+- 임베딩: `@xenova/transformers` (Xenova/multilingual-e5-large, 1024차원) — 외부 API 없음, 자체 실행
+
+**RAG 파이프라인 구조**:
+```
+[사전 적재] Jikan API → searchable_text 생성 → multilingual-e5-large → vector(1024) → anime_cache 저장
+[채팅 요청] 사용자 메시지 → 자체 임베딩 → search_similar_anime() → TOP 10 → 시스템 프롬프트 주입 → Claude Haiku 응답
+```
+
+**anime_cache 테이블 주요 컬럼**:
+- `searchable_text TEXT` — 임베딩 소스 (제목+장르+시놉시스+테마+인구통계 조합)
+- `embedding vector(1024)` — multilingual-e5-large 결과
+
+**searchable_text 생성 규칙**:
+```typescript
+`${title} ${title_english ?? ''} ${genres} ${themes} ${demographics} ${synopsis ?? ''}`.trim()
+```
+
+**벡터 차원**: 모든 임베딩은 **1024차원** (vector(1024))
+
+**NestJS 모듈 구조**:
+```
+backend/src/
+├── auth/         # Supabase Auth JWT 검증 미들웨어
+├── chat/         # POST /api/chat (RAG 파이프라인 포함)
+├── conversations/# 대화 CRUD
+├── anime/        # Jikan API + anime_cache + 벡터 검색
+├── embeddings/   # @xenova/transformers 자체 임베딩 서비스 (multilingual-e5-large)
+├── user/         # 프로필, 선호도, 워치리스트
+└── common/       # Guards, Pipes, Interceptors
+```
+
+---
+
 ## Core Responsibilities
 
 1. **API Design & Implementation**: Design RESTful APIs and GraphQL schemas following industry best practices. Ensure proper HTTP status codes, consistent response formats, pagination, filtering, and error handling.

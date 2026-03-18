@@ -41,7 +41,7 @@ export class ChatController {
   async createChat(
     @Body() body: CreateChatDtoClass,
     @Req() req: ExpressRequest,
-  ): Promise<{ success: true; data: object }> {
+  ): Promise<{ success: true; data: object; isOrganized: boolean; organizedData?: object[] }> {
     // Zod로 입력 유효성 검사
     const parseResult = CreateChatSchema.safeParse(body);
     if (!parseResult.success) {
@@ -60,7 +60,9 @@ export class ChatController {
 
     return {
       success: true,
-      data: result,
+      data: result.data,
+      isOrganized: result.isOrganized,
+      organizedData: result.organizedData,
     };
   }
 }

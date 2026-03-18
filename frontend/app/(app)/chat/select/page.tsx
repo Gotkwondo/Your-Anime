@@ -9,6 +9,7 @@ import { ConversationList } from '@/components/sidebar/ConversationList';
 import { PersonaSelector } from '@/components/chat/PersonaSelector';
 import { PersonaType } from '@/types/conversation';
 import { AppHeader, HeaderButton } from '@/components/layout/AppHeader';
+import { ConversationCountSkeleton } from '@/components/ui/Skeleton';
 
 export default function ChatSelectPage() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function ChatSelectPage() {
     createConversation,
     loadConversation,
     deleteConversation,
+    isLoading: conversationsLoading,
   } = useConversationStore();
   const { setConversation } = useChatStore();
 
@@ -107,12 +109,16 @@ export default function ChatSelectPage() {
                   style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
                 >
                   <span className="text-xs text-[#85868b]">Total</span>
-                  <div className="text-right">
-                    <p className="text-3xl font-bold" style={{ color: '#03f7b5' }}>{conversations.length}</p>
-                    <p className="text-xs text-[#85868b]">
-                      {conversations.length === 1 ? 'conversation' : 'conversations'}
-                    </p>
-                  </div>
+                  {conversationsLoading ? (
+                    <ConversationCountSkeleton />
+                  ) : (
+                    <div className="text-right">
+                      <p className="text-3xl font-bold" style={{ color: '#03f7b5' }}>{conversations.length}</p>
+                      <p className="text-xs text-[#85868b]">
+                        {conversations.length === 1 ? 'conversation' : 'conversations'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

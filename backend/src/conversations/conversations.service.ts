@@ -37,11 +37,45 @@ interface ConversationDetailRow {
   updated_at: string;
 }
 
+interface AnimeReferenceRow {
+  malId?: number;
+  mal_id?: number; // 구버전 호환
+  title: string;
+  titleJapanese?: string | null;
+  imageUrl?: string | null;
+  score?: number | null;
+  genres?: string[];
+  episodes?: number | null;
+  status?: string | null;
+  synopsis?: string | null;
+  synopsisKo?: string | null;
+  url?: string | null;
+  aiReasoning?: string | null;
+}
+
+interface AnimeCacheRow {
+  mal_id: number;
+  data: {
+    title: string;
+    title_japanese: string | null;
+    images: {
+      jpg: { large_image_url: string | null; image_url: string | null };
+    };
+    score: number | null;
+    genres: Array<{ name: string }>;
+    episodes: number | null;
+    status: string | null;
+    synopsis: string | null;
+    synopsis_ko?: string | null;
+    url: string;
+  };
+}
+
 interface MessageRow {
   id: string;
   role: string;
   content: string;
-  anime_references: object[];
+  anime_references: AnimeReferenceRow[];
   created_at: string;
 }
 
@@ -268,6 +302,51 @@ export class ConversationsService {
       });
     }
 
+    // anime_references에 imageUrl이 없는 경우 anime_cache에서 보완
+    const allRefs = messages.flatMap((m) => m.anime_references ?? []);
+    const missingIds = allRefs
+      .filter((r) => !r.imageUrl)
+      .map((r) => r.malId ?? r.mal_id)
+      .filter((id): id is number => id != null);
+
+    const cacheMap = new Map<number, AnimeCacheRow['data']>();
+    if (missingIds.length > 0) {
+      const { data: cacheRows } = await supabase
+        .from('anime_cache')
+        .select('mal_id, data')
+        .in('mal_id', missingIds);
+
+      const typedCacheRows =
+        (cacheRows as unknown as AnimeCacheRow[] | null) ?? [];
+      typedCacheRows.forEach((row) => {
+        cacheMap.set(row.mal_id, row.data);
+      });
+    }
+
+    const enrichRef = (r: AnimeReferenceRow): object => {
+      const id = r.malId ?? r.mal_id;
+      if (r.imageUrl || !id) return r;
+      const cached = cacheMap.get(id);
+      if (!cached) return r;
+      return {
+        malId: id,
+        title: r.title ?? cached.title,
+        titleJapanese: r.titleJapanese ?? cached.title_japanese,
+        imageUrl:
+          cached.images?.jpg?.large_image_url ??
+          cached.images?.jpg?.image_url ??
+          null,
+        score: r.score ?? cached.score,
+        genres: r.genres ?? (cached.genres ?? []).map((g) => g.name),
+        episodes: r.episodes ?? cached.episodes,
+        status: r.status ?? cached.status,
+        synopsis: r.synopsis ?? cached.synopsis,
+        synopsisKo: r.synopsisKo ?? cached.synopsis_ko ?? null,
+        url: r.url ?? cached.url,
+        aiReasoning: r.aiReasoning ?? null,
+      };
+    };
+
     return {
       id: conversation.id,
       title: conversation.title,
@@ -278,7 +357,7 @@ export class ConversationsService {
         id: msg.id,
         role: msg.role,
         content: msg.content,
-        animeReferences: msg.anime_references,
+        animeReferences: (msg.anime_references ?? []).map(enrichRef),
         createdAt: msg.created_at,
       })),
     };

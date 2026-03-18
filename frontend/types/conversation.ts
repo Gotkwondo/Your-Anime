@@ -11,6 +11,7 @@ export interface AnimeReference {
   episodes?: number | null;
   status?: string | null;
   synopsis?: string | null;
+  synopsisKo?: string | null;
   url?: string;
   aiReasoning?: string;
 }
@@ -21,6 +22,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  messageType?: 'chat' | 'recommendation';
   animeReferences?: AnimeReference[];
 }
 

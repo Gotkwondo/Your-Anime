@@ -24,7 +24,7 @@ export function AppHeader({ subtitle, leftAction, rightActions }: AppHeaderProps
           <div>
             <Link href="/">
               <span className="text-base font-bold text-white hover:text-[#03f7b5] transition-colors">
-                AnimeSommelier
+                Your Anime
               </span>
             </Link>
             {subtitle && (

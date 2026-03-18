@@ -530,19 +530,19 @@ Frontend:
   Animation: Framer Motion 11
 
 Backend:
-  Runtime: Next.js API Routes (Node.js 20)
-  API Framework: Next.js Route Handlers
+  Runtime: NestJS (Node.js 20)
+  API Framework: NestJS (Express 기반)
   Authentication: Supabase Auth
   Rate Limiting: upstash/ratelimit
 
 Database:
   Primary DB: Supabase (PostgreSQL 15)
   Vector Extension: pgvector 0.5
-  ORM: Prisma 5.8 (optional) or Supabase JS Client
+  Client: Supabase JS Client (service role)
 
 AI Services:
-  LLM: Claude Sonnet 4.5 (Anthropic API)
-  Embeddings: text-embedding-3-small (OpenAI API)
+  LLM: Gemini 2.0 Flash (Google AI API) — 기본 대화
+  Embeddings: @xenova/transformers — Xenova/multilingual-e5-large (자체 파이프라인, 외부 API 없음)
 
 External APIs:
   Anime Data: Jikan API v4 (MyAnimeList)
@@ -563,139 +563,53 @@ Development Tools:
 
 ### 3.2 Project Structure
 
+> **모노레포 구조** — `frontend/` (Next.js 15)와 `backend/` (NestJS)로 분리
+
 ```
-anime-recommendation-app/
-├── .env.local                    # Environment variables
-├── .gitignore
-├── next.config.js
-├── package.json
-├── tailwind.config.ts
-├── tsconfig.json
-├── README.md
-├── PRD.md                        # This file
+Your-Anime/                         # 모노레포 루트
+├── PRD.md                          # This file
+├── vercel.json                     # Vercel 빌드 설정 (frontend/ 대상)
 │
-├── app/
-│   ├── layout.tsx                # Root layout with providers
-│   ├── page.tsx                  # Landing page
-│   ├── globals.css               # Global styles
+├── frontend/                       # Next.js 15 (App Router) — Vercel 배포
+│   ├── app/
+│   │   ├── layout.tsx              # Root layout with providers
+│   │   ├── globals.css
+│   │   ├── (auth)/                 # 공개 라우트
+│   │   │   ├── login/page.tsx
+│   │   │   └── signup/page.tsx
+│   │   └── (app)/                  # 인증 필요 라우트
+│   │       ├── chat/
+│   │       │   ├── page.tsx        # 채팅 인터페이스
+│   │       │   └── select/page.tsx # 대화 선택 / 페르소나 선택
+│   │       └── layout.tsx
 │   │
-│   ├── (auth)/                   # Auth routes group
-│   │   ├── login/
-│   │   │   └── page.tsx
-│   │   ├── signup/
-│   │   │   └── page.tsx
-│   │   └── layout.tsx
+│   ├── components/
+│   │   ├── ui/                     # 공통 UI 컴포넌트
+│   │   ├── chat/                   # ChatInterface, MessageBubble, ChatInput, TypingIndicator
+│   │   ├── anime/                  # AnimeCard, AnimeGrid, GenreTag, RatingDisplay
+│   │   └── sidebar/                # ConversationSidebar, ConversationItem
 │   │
-│   ├── (app)/                    # Main app routes (requires auth)
-│   │   ├── chat/
-│   │   │   ├── page.tsx          # Chat interface
-│   │   │   └── [conversationId]/
-│   │   │       └── page.tsx      # Specific conversation
-│   │   ├── watchlist/
-│   │   │   └── page.tsx
-│   │   ├── preferences/
-│   │   │   └── page.tsx
-│   │   └── layout.tsx            # App layout with sidebar
+│   ├── lib/
+│   │   ├── auth/mockAuth.ts        # → 추후 Supabase Auth로 교체
+│   │   ├── mock/                   # → 추후 Backend API 호출로 교체
+│   │   └── utils/cn.ts
 │   │
-│   └── api/                      # API routes
-│       ├── chat/
-│       │   └── route.ts          # POST /api/chat
-│       ├── conversations/
-│       │   ├── route.ts          # GET, POST /api/conversations
-│       │   └── [id]/
-│       │       └── route.ts      # GET, DELETE /api/conversations/[id]
-│       ├── anime/
-│       │   ├── search/
-│       │   │   └── route.ts      # GET /api/anime/search
-│       │   └── [id]/
-│       │       └── route.ts      # GET /api/anime/[id]
-│       ├── user/
-│       │   ├── preferences/
-│       │   │   └── route.ts      # GET, POST /api/user/preferences
-│       │   └── profile/
-│       │       └── route.ts      # GET, PATCH /api/user/profile
-│       └── webhooks/
-│           └── supabase/
-│               └── route.ts      # Supabase webhooks
+│   ├── store/                      # Zustand stores
+│   │   ├── useAuthStore.ts
+│   │   ├── useConversationStore.ts
+│   │   └── useChatStore.ts
+│   │
+│   └── next.config.ts              # /api/* → NEXT_PUBLIC_BACKEND_URL 프록시
 │
-├── components/
-│   ├── ui/                       # shadcn/ui components
-│   │   ├── button.tsx
-│   │   ├── input.tsx
-│   │   ├── card.tsx
-│   │   ├── dialog.tsx
-│   │   ├── dropdown-menu.tsx
-│   │   ├── scroll-area.tsx
-│   │   └── ...
-│   │
-│   ├── chat/
-│   │   ├── ChatInterface.tsx
-│   │   ├── MessageBubble.tsx
-│   │   ├── ChatInput.tsx
-│   │   ├── TypingIndicator.tsx
-│   │   └── PersonaSelector.tsx
-│   │
-│   ├── anime/
-│   │   ├── AnimeCard.tsx
-│   │   ├── AnimeGrid.tsx
-│   │   ├── AnimeSearchBar.tsx
-│   │   ├── GenreTag.tsx
-│   │   └── RatingDisplay.tsx
-│   │
-│   ├── sidebar/
-│   │   ├── ConversationSidebar.tsx
-│   │   ├── ConversationItem.tsx
-│   │   └── NewChatButton.tsx
-│   │
-│   └── providers/
-│       ├── AuthProvider.tsx
-│       ├── QueryProvider.tsx
-│       └── ThemeProvider.tsx
-│
-├── lib/
-│   ├── supabase/
-│   │   ├── client.ts             # Supabase browser client
-│   │   ├── server.ts             # Supabase server client
-│   │   └── schema.sql            # Database schema
-│   │
-│   ├── ai/
-│   │   ├── claude.ts             # Claude API wrapper
-│   │   ├── embeddings.ts         # OpenAI embeddings
-│   │   └── prompts.ts            # System prompts by persona
-│   │
-│   ├── api/
-│   │   ├── jikan.ts              # Jikan API service
-│   │   └── rate-limiter.ts       # Rate limiting utilities
-│   │
-│   └── utils/
-│       ├── validators.ts         # Input validation
-│       ├── sanitize.ts           # Input sanitization
-│       ├── format.ts             # Data formatting
-│       └── errors.ts             # Error handling
-│
-├── types/
-│   ├── anime.ts                  # Anime-related types
-│   ├── conversation.ts           # Conversation types
-│   ├── user.ts                   # User types
-│   ├── api.ts                    # API response types
-│   └── database.ts               # Database types
-│
-├── hooks/
-│   ├── useChat.ts                # Chat functionality hook
-│   ├── useConversations.ts       # Conversation management
-│   ├── useAuth.ts                # Authentication hook
-│   └── useAnimeSearch.ts         # Anime search hook
-│
-├── public/
-│   ├── images/
-│   │   ├── personas/             # Persona avatars
-│   │   └── placeholders/         # Placeholder images
-│   └── favicon.ico
-│
-└── supabase/
-    ├── migrations/               # Database migrations
-    │   └── 001_initial_schema.sql
-    └── seed.sql                  # Seed data for development
+└── backend/                        # NestJS — Railway/Render 배포
+    └── src/
+        ├── auth/                   # Supabase Auth 연동, JWT 미들웨어
+        ├── chat/                   # POST /api/chat (Claude Haiku + RAG 파이프라인)
+        ├── conversations/          # 대화 CRUD
+        ├── anime/                  # Jikan API + anime_cache + 벡터 검색
+        ├── embeddings/             # @xenova/transformers 자체 임베딩 서비스
+        ├── user/                   # 프로필, 선호도, 워치리스트
+        └── common/                 # Guards, Pipes, Interceptors
 ```
 
 ### 3.3 Database Schema (Supabase/PostgreSQL)
@@ -739,7 +653,7 @@ CREATE TABLE public.messages (
   conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
   content TEXT NOT NULL,
-  embedding vector(1536), -- OpenAI text-embedding-3-small dimension
+  embedding vector(1024), -- multilingual-e5-large dimension
   anime_references JSONB DEFAULT '[]'::JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   metadata JSONB DEFAULT '{}'::JSONB
@@ -751,19 +665,21 @@ CREATE TABLE public.user_preferences (
   user_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
   category TEXT NOT NULL CHECK (category IN ('genre', 'theme', 'mood', 'avoid')),
   preference_text TEXT NOT NULL,
-  embedding vector(1536),
+  embedding vector(1024),
   confidence_score FLOAT DEFAULT 1.0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Anime cache table (reduce Jikan API calls)
+-- Anime cache table (reduce Jikan API calls + RAG vector search)
 CREATE TABLE public.anime_cache (
   mal_id INTEGER PRIMARY KEY,
   title TEXT NOT NULL,
   title_english TEXT,
   title_japanese TEXT,
-  data JSONB NOT NULL,
+  data JSONB NOT NULL,                    -- Jikan API 원본 응답
+  searchable_text TEXT,                   -- 임베딩 소스 텍스트 (장르+시놉시스+태그 조합)
+  embedding vector(1024),                 -- multilingual-e5-large (자체 파이프라인)
   cached_at TIMESTAMPTZ DEFAULT NOW(),
   expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '7 days')
 );
@@ -801,6 +717,7 @@ CREATE INDEX idx_messages_embedding ON public.messages USING ivfflat (embedding 
 CREATE INDEX idx_user_preferences_user_id ON public.user_preferences(user_id);
 CREATE INDEX idx_user_preferences_embedding ON public.user_preferences USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 CREATE INDEX idx_anime_cache_expires_at ON public.anime_cache(expires_at);
+CREATE INDEX idx_anime_cache_embedding ON public.anime_cache USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 CREATE INDEX idx_watchlist_user_id ON public.watchlist(user_id);
 CREATE INDEX idx_recommendation_history_user_id ON public.recommendation_history(user_id);
 
@@ -848,7 +765,7 @@ CREATE POLICY "Users can create messages" ON public.messages
 
 -- Functions for vector similarity search
 CREATE OR REPLACE FUNCTION search_similar_messages(
-  query_embedding vector(1536),
+  query_embedding vector(1024),
   match_threshold float,
   match_count int,
   user_id_param UUID
@@ -873,6 +790,38 @@ BEGIN
   WHERE c.user_id = user_id_param
     AND 1 - (m.embedding <=> query_embedding) > match_threshold
   ORDER BY m.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+-- Function for anime vector similarity search (RAG)
+CREATE OR REPLACE FUNCTION search_similar_anime(
+  query_embedding vector(1024),
+  match_threshold float DEFAULT 0.5,
+  match_count int DEFAULT 10
+)
+RETURNS TABLE (
+  mal_id INTEGER,
+  title TEXT,
+  title_english TEXT,
+  similarity float,
+  data JSONB
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    a.mal_id,
+    a.title,
+    a.title_english,
+    1 - (a.embedding <=> query_embedding) as similarity,
+    a.data
+  FROM public.anime_cache a
+  WHERE a.embedding IS NOT NULL
+    AND a.expires_at > NOW()
+    AND 1 - (a.embedding <=> query_embedding) > match_threshold
+  ORDER BY a.embedding <=> query_embedding
   LIMIT match_count;
 END;
 $$;
@@ -913,7 +862,49 @@ CREATE TRIGGER update_watchlist_updated_at
   EXECUTE FUNCTION update_updated_at_column();
 ```
 
-### 3.4 Environment Variables
+### 3.4 RAG (Retrieval-Augmented Generation) 아키텍처
+
+#### 개요
+사용자의 자연어 입력을 기반으로 Supabase pgvector에서 의미적으로 유사한 애니메이션을 검색하고, 검색 결과를 Claude Haiku의 컨텍스트에 주입하여 정확한 추천을 제공합니다.
+
+#### 데이터 적재 파이프라인 (사전 작업)
+```
+Jikan API (인기 애니 목록)
+  → 각 애니의 searchable_text 생성
+    (형식: "{title} {genres} {synopsis} {themes} {demographics}")
+  → @xenova/transformers (multilingual-e5-large) → vector(1024)
+  → anime_cache 테이블에 저장 (embedding + searchable_text 컬럼)
+```
+
+#### 채팅 요청 시 RAG 흐름
+```
+① 사용자 메시지 수신
+② 메시지 → 자체 임베딩 (multilingual-e5-large) → vector(1024)
+③ search_similar_anime() 호출 → 유사 애니 TOP 10 추출
+④ 추출된 애니 정보를 시스템 프롬프트에 주입:
+   "다음 애니 목록을 참고해서 추천해주세요: [제목, 장르, 시놉시스 요약]"
+⑤ Claude Haiku → 최종 응답 생성
+⑥ 응답 내 추천 애니 정보 → anime_references에 저장
+```
+
+#### searchable_text 생성 규칙
+```typescript
+function buildSearchableText(anime: JikanAnime): string {
+  const genres = anime.genres.map(g => g.name).join(' ');
+  const themes = anime.themes.map(t => t.name).join(' ');
+  const demographics = anime.demographics.map(d => d.name).join(' ');
+  return `${anime.title} ${anime.title_english ?? ''} ${genres} ${themes} ${demographics} ${anime.synopsis ?? ''}`.trim();
+}
+```
+
+#### 비용 최적화 전략
+- anime_cache 데이터는 7일 TTL, 임베딩은 만료 전까지 재사용
+- 검색 시 임베딩만 생성 (anime 데이터 임베딩은 적재 시 1회만)
+- match_threshold: 0.5 이상만 결과에 포함 (노이즈 제거)
+
+---
+
+### 3.5 Environment Variables
 
 ```bash
 # .env.local
@@ -926,7 +917,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 # Anthropic Claude API
 ANTHROPIC_API_KEY=sk-ant-api03-your-key
 
-# OpenAI API (for embeddings)
+# OpenAI API (for embeddings) — 자체 임베딩 파이프라인 사용 시 불필요
 OPENAI_API_KEY=sk-your-openai-key
 
 # Rate Limiting (Upstash Redis)
@@ -1118,12 +1109,16 @@ npx shadcn-ui@latest add button input card dialog dropdown-menu scroll-area
 
 ---
 
-#### Milestone 3: Recommendations
-**Goal:** 추천 애니메이션을 카드 형태로 표시
-**Completion Criteria:** AI 응답에 포함된 추천이 AnimeCard로 렌더링됨
+#### Milestone 3: Recommendations + RAG
+**Goal:** 추천 애니메이션을 카드 형태로 표시 + RAG 기반 의미 검색 구축
+**Completion Criteria:** AI 응답에 포함된 추천이 AnimeCard로 렌더링되며, 벡터 검색으로 컨텍스트 주입됨
 
-- [ ] Jikan API service (lib/api/jikan.ts)
-- [ ] Anime caching system (anime_cache table)
+- [ ] NestJS anime 모듈 (Jikan API 서비스)
+- [ ] anime_cache 적재 시스템 (인기 애니 사전 적재 스크립트)
+- [ ] NestJS embeddings 모듈 (@xenova/transformers, multilingual-e5-large)
+- [ ] anime_cache 임베딩 생성 및 저장 파이프라인
+- [ ] search_similar_anime() 기반 벡터 검색 서비스
+- [ ] chat 모듈에 RAG 파이프라인 연결
 - [ ] F2: AnimeCard component
 - [ ] F2: AnimeGrid layout
 - [ ] F2: GenreTag and RatingDisplay components

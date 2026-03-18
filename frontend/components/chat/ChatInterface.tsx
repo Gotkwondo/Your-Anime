@@ -30,7 +30,10 @@ export function ChatInterface({
   return (
     <div className="flex flex-col h-full" style={{ background: '#04050e' }}>
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 max-w-3xl mx-auto w-full">
+      <div
+        className="flex-1 overflow-y-auto p-6 space-y-4 max-w-3xl mx-auto w-full [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: 'none' }}
+      >
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center space-y-3">

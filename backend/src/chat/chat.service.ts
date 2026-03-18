@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service.js';
 import { ClaudeService, ChatMessage } from '../ai/claude.service.js';
-import { EmbeddingsService } from '../ai/embeddings.service.js';
 import { CreateChatDto } from './dto/create-chat.dto.js';
 import {
   AnimeRecommendation,
@@ -24,6 +23,14 @@ interface MessageHistoryRow {
   content: string;
 }
 
+interface SessionData {
+  profileStage?: string;
+  turnCount?: number;
+  collectedProfile?: Record<string, unknown>;
+  readyToRecommend?: boolean;
+  [key: string]: unknown;
+}
+
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
@@ -31,12 +38,11 @@ export class ChatService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly claudeService: ClaudeService,
-    private readonly embeddingsService: EmbeddingsService,
   ) {}
 
   /**
    * POST /api/chat 핵심 로직
-   * 1. 소유권 검증 → 2. 히스토리 로드 → 3. Claude 호출 → 4. 추천 파싱 → 5. 캐시/Jikan → 6. DB 저장
+   * 1. 소유권 검증 → 2. 히스토리 로드 → 3. Gemini 호출 → 4. 세션 데이터 저장 → 5. 추천 파싱 → 6. DB 저장
    */
   async processChat(dto: CreateChatDto, userId: string): Promise<ChatResponse> {
     const supabase = this.supabaseService.getServiceRoleClient();
@@ -45,7 +51,7 @@ export class ChatService {
     // 1. conversations 테이블에서 소유권 검증
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('id, persona_type, user_id')
+      .select('id, persona_type, user_id, session_data')
       .eq('id', conversationId)
       .single();
 
@@ -67,13 +73,13 @@ export class ChatService {
 
     const personaType = conversation.persona_type as PersonaType;
 
-    // 2. 최근 메시지 20개 로드 (대화 히스토리)
+    // 2. 최근 메시지 20개 로드 + 기존 session_data
     const { data: rawRecentMessages } = await supabase
       .from('messages')
       .select('role, content')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
-      .limit(20);
+      .limit(10);
 
     const recentMessages =
       (rawRecentMessages as unknown as MessageHistoryRow[] | null) ?? [];
@@ -82,35 +88,64 @@ export class ChatService {
       content: msg.content,
     }));
 
-    // 3. Claude API 호출
+    const existingSessionData =
+      (conversation.session_data as SessionData) ?? {};
+
+    // 4. Gemini API 호출 (기존 session_data를 컨텍스트로 주입)
     const { message: aiMessage, rawContent } = await this.claudeService.chat(
       message,
       conversationHistory,
       personaType,
+      existingSessionData,
     );
 
-    // 4. 응답에서 추천 JSON 블록 파싱
-    const parsedRecs = this.claudeService.parseRecommendations(rawContent);
+    // 5. session_data 블록 파싱 후 conversations 테이블에 저장
+    const newSessionData = this.parseSessionData(rawContent);
+    if (newSessionData) {
+      await supabase
+        .from('conversations')
+        .update({
+          session_data: newSessionData,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', conversationId);
+    } else {
+      await supabase
+        .from('conversations')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', conversationId);
+    }
 
-    // 5. 추천된 애니메이션 정보 수집 (캐시 우선, 없으면 Jikan API)
+    // 6. 응답에서 추천 JSON 블록 파싱
+    const parsedRecs = this.claudeService.parseRecommendations(rawContent);
+    const isRecommendation = parsedRecs !== null && parsedRecs.length > 0;
+
+    // 7. 추천된 애니메이션 정보 수집 (캐시 우선, 없으면 Jikan API)
     let recommendations: AnimeRecommendation[] | undefined;
-    if (parsedRecs && parsedRecs.length > 0) {
+    if (isRecommendation) {
       recommendations = await this.fetchAnimeDetails(parsedRecs);
     }
 
-    // 6. 메시지 임베딩 생성 (비동기 처리 - 실패해도 응답은 반환)
-    let userEmbedding: number[] | null = null;
-    let assistantEmbedding: number[] | null = null;
-    try {
-      [userEmbedding, assistantEmbedding] =
-        await this.embeddingsService.embedTexts([message, aiMessage]);
-    } catch (embeddingError) {
-      this.logger.warn('임베딩 생성 실패 (응답은 계속 진행)', embeddingError);
-    }
+    // 8. 메시지 임베딩 생성 — 자체 파이프라인 구축 전까지 비활성화
+    const userEmbedding: number[] | null = null;
+    const assistantEmbedding: number[] | null = null;
 
-    // 7. messages 테이블에 user/assistant 메시지 INSERT
+    // 9. messages 테이블에 user/assistant 메시지 INSERT
+    // 프론트 AnimeReference와 동일한 camelCase 전체 데이터 저장 (히스토리 로드 시 재사용)
     const animeRefs = recommendations
-      ? recommendations.map((r) => ({ mal_id: r.malId, title: r.title }))
+      ? recommendations.map((r) => ({
+          malId: r.malId,
+          title: r.title,
+          titleJapanese: r.titleJapanese,
+          imageUrl: r.imageUrl,
+          score: r.score,
+          genres: r.genres,
+          episodes: r.episodes,
+          status: r.status,
+          synopsis: r.synopsis,
+          url: r.url,
+          aiReasoning: r.aiReasoning,
+        }))
       : [];
 
     const { error: insertError } = await supabase.from('messages').insert([
@@ -131,7 +166,12 @@ export class ChatService {
     ]);
 
     if (insertError) {
-      this.logger.error('메시지 저장 실패', insertError);
+      this.logger.error('메시지 저장 실패', {
+        code: insertError.code,
+        message: insertError.message,
+        details: insertError.details,
+        hint: insertError.hint,
+      });
       throw new BadRequestException({
         success: false,
         error: '메시지를 저장하는 중 오류가 발생했습니다.',
@@ -139,17 +179,35 @@ export class ChatService {
       });
     }
 
-    // 8. conversations.updated_at 갱신
-    await supabase
-      .from('conversations')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', conversationId);
-
     return {
-      message: aiMessage,
-      conversationId,
-      recommendations,
+      data: {
+        conversationId,
+        message: aiMessage,
+        messageType: isRecommendation ? 'recommendation' : 'chat',
+      },
+      isOrganized: isRecommendation,
+      organizedData: recommendations,
     };
+  }
+
+  /**
+   * AI 응답에서 session_data 블록을 파싱합니다.
+   * ```session_data {...} ``` 형태의 블록을 추출합니다.
+   */
+  private parseSessionData(rawContent: string): SessionData | null {
+    const sessionDataRegex = /```session_data\s*([\s\S]*?)\s*```/;
+    const match = rawContent.match(sessionDataRegex);
+
+    if (!match || !match[1]) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(match[1]) as SessionData;
+    } catch {
+      this.logger.warn('session_data 파싱 실패', { rawContent });
+      return null;
+    }
   }
 
   /**
@@ -169,26 +227,31 @@ export class ChatService {
       .in('mal_id', malIds)
       .gt('expires_at', new Date().toISOString());
 
-    const cachedMap = new Map<number, JikanAnimeData>(
-      (cachedAnime ?? []).map((item) => [
-        item.mal_id,
-        item.data as JikanAnimeData,
-      ]),
+    type CachedData = JikanAnimeData & { synopsis_ko?: string | null };
+
+    const cachedMap = new Map<number, CachedData>(
+      (cachedAnime ?? []).map((item) => [item.mal_id, item.data as CachedData]),
     );
 
     const results: AnimeRecommendation[] = [];
 
     for (const rec of parsedRecs) {
       const reasoningForRec = rec.reasoning;
-      let animeData: JikanAnimeData | undefined = cachedMap.get(rec.mal_id);
+      let animeData: CachedData | undefined = cachedMap.get(rec.mal_id);
 
       // 캐시 미스: Jikan API 호출
       if (!animeData) {
         try {
           const fetched = await this.fetchFromJikan(rec.mal_id);
           if (fetched) {
-            animeData = fetched;
-            // 캐시에 저장 (upsert)
+            // 시놉시스 한글 번역
+            const synopsisKo = fetched.synopsis
+              ? await this.claudeService.translateToKorean(fetched.synopsis)
+              : null;
+
+            animeData = { ...fetched, synopsis_ko: synopsisKo };
+
+            // 번역 포함하여 캐시 저장
             await supabase.from('anime_cache').upsert({
               mal_id: rec.mal_id,
               title: animeData.title,
@@ -207,6 +270,16 @@ export class ChatService {
             error,
           );
         }
+      } else if (animeData.synopsis && !animeData.synopsis_ko) {
+        // 캐시에 한글 번역이 없으면 번역 후 캐시 업데이트
+        const synopsisKo = await this.claudeService.translateToKorean(
+          animeData.synopsis,
+        );
+        animeData = { ...animeData, synopsis_ko: synopsisKo };
+        await supabase
+          .from('anime_cache')
+          .update({ data: animeData })
+          .eq('mal_id', rec.mal_id);
       }
 
       if (animeData) {
@@ -243,7 +316,7 @@ export class ChatService {
    * Jikan 데이터를 AnimeRecommendation 형식으로 변환합니다.
    */
   private mapToAnimeRecommendation(
-    data: JikanAnimeData,
+    data: JikanAnimeData & { synopsis_ko?: string | null },
     aiReasoning: string,
   ): AnimeRecommendation {
     return {
@@ -259,6 +332,7 @@ export class ChatService {
       episodes: data.episodes,
       status: data.status,
       synopsis: data.synopsis,
+      synopsisKo: data.synopsis_ko ?? null,
       url: data.url,
       aiReasoning,
     };

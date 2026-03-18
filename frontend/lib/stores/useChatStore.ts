@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Message, PersonaType } from '@/types/conversation';
+import { AnimeReference, Message, PersonaType } from '@/types/conversation';
 import { apiRequest } from '@/lib/api/client';
 import { useConversationStore } from './useConversationStore';
 
@@ -11,29 +11,43 @@ interface ChatStore {
   error: string | null;
 
   setConversation: (conversationId: string, personaType: PersonaType) => void;
+  loadHistory: (conversationId: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   clearMessages: () => void;
+}
+
+interface ApiMessageItem {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  animeReferences: AnimeReference[];
+  createdAt: string;
+}
+
+interface OrganizedAnime {
+  malId: number;
+  title: string;
+  titleJapanese: string | null;
+  imageUrl: string | null;
+  score: number | null;
+  genres: string[];
+  episodes: number | null;
+  status: string | null;
+  synopsis: string | null;
+  synopsisKo: string | null;
+  url: string;
+  aiReasoning: string;
 }
 
 interface ChatApiResponse {
   success: true;
   data: {
-    message: string;
     conversationId: string;
-    recommendations?: Array<{
-      malId: number;
-      title: string;
-      titleJapanese: string | null;
-      imageUrl: string | null;
-      score: number | null;
-      genres: string[];
-      episodes: number | null;
-      status: string | null;
-      synopsis: string | null;
-      url: string;
-      aiReasoning: string;
-    }>;
+    message: string;
+    messageType: 'chat' | 'recommendation';
   };
+  isOrganized: boolean;
+  organizedData?: OrganizedAnime[];
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -45,6 +59,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setConversation: (conversationId: string, personaType: PersonaType) => {
     set({ conversationId, personaType, messages: [], error: null });
+  },
+
+  loadHistory: async (conversationId: string) => {
+    try {
+      const res = await apiRequest<{
+        success: true;
+        data: { id: string; messages: ApiMessageItem[] };
+      }>(`/api/conversations/${conversationId}`);
+
+      const messages: Message[] = res.data.messages.map((m) => ({
+        id: m.id,
+        conversationId,
+        role: m.role === 'system' ? 'assistant' : m.role,
+        content: m.content,
+        timestamp: new Date(m.createdAt),
+        animeReferences: m.animeReferences,
+      }));
+
+      set({ messages });
+    } catch {
+      // 히스토리 로드 실패 시 빈 상태 유지 (에러 표시 불필요)
+    }
   },
 
   sendMessage: async (content: string) => {
@@ -73,7 +109,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         role: 'assistant',
         content: res.data.message,
         timestamp: new Date(),
-        animeReferences: res.data.recommendations,
+        messageType: res.data.messageType,
+        animeReferences: res.isOrganized ? res.organizedData : undefined,
       };
 
       set((state) => ({
